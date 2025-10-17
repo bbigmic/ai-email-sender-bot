@@ -211,13 +211,17 @@ INSTRUKCJE:
 2. Zawsze wysylaj emaile na adres: {user_email}
 3. Sam decyduj jaki ma byc temat i tresc emaila na podstawie widoamosci od uzytkownika.
 4. Daty podawaj w formacie: DD.MM.RRRR HH:MM lub "za X minut/godzin/dni"
-5. Jesli uzytkownik wspomni o zalaczniku, popros o przeslanie pliku
-6. Przed ustaleniem daty wysylki emaila zawsze wywołaj funkcję get_actual_datetime() aby uzyskać aktualną datę i godzinę
-7. Pamiętaj, ze Twoim glownym zadaniem jest planowanie wysylki emaili.
+5. Przed ustaleniem daty wysylki emaila zawsze wywołaj funkcję get_actual_datetime() aby uzyskać aktualną datę i godzinę
+6. Pamiętaj, ze Twoim glownym zadaniem jest planowanie wysylki emaili.
+
+DOSTĘPNE FUNKCJE:
+- get_actual_datetime(): Zwraca aktualną datę i godzinę w formacie DD.MM.RRRR HH:MM
+- get_user_email(): Zwraca aktualny email użytkownika na który będą wysyłane emaile
+
+Użyj tych funkcji gdy potrzebujesz aktualnych informacji!
 
 FORMAT ODPOWIEDZI:
 - Jesli masz wszystkie dane: "GOTOWE: temat|tresc|data_wysylki"
-- Jesli potrzebujesz zalacznika: "ZALACZNIK: opisz co potrzebujesz"
 
 Przyklad kompletnych danych:
 GOTOWE: Przypomnienie o spotkaniu|Spotkanie za 15 minut w sali konferencyjnej|za 2 godziny"""
@@ -267,7 +271,16 @@ GOTOWE: Przypomnienie o spotkaniu|Spotkanie za 15 minut w sali konferencyjnej|za
             functions = [
                 {
                     "name": "get_actual_datetime",
-                    "description": "Pobiera aktualną datę i godzinę",
+                    "description": "Pobiera aktualną datę i godzinę w formacie DD.MM.RRRR HH:MM. Użyj gdy użytkownik mówi o datach względnych jak 'jutro', 'za godzinę', 'za 2 dni'",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                },
+                {
+                    "name": "get_user_email",
+                    "description": "Pobiera aktualny email użytkownika na który będą wysyłane emaile",
                     "parameters": {
                         "type": "object",
                         "properties": {},
@@ -278,12 +291,10 @@ GOTOWE: Przypomnienie o spotkaniu|Spotkanie za 15 minut w sali konferencyjnej|za
             
             # Wyślij do OpenAI z funkcjami
             response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model=self.config.get("openai_model", "gpt-3.5-turbo"),
                 messages=clean_context,
                 functions=functions,
-                function_call="auto",
-                max_tokens=500,
-                temperature=0.7
+                function_call="auto"
             )
             
             # Sprawdź czy AI chce wywołać funkcję
@@ -299,13 +310,20 @@ GOTOWE: Przypomnienie o spotkaniu|Spotkanie za 15 minut w sali konferencyjnej|za
                         "content": f"Aktualna data i godzina: {current_time}"
                     })
                     
-                    # Wyślij ponownie do AI z informacją o czasie
-                    response = self.openai_client.chat.completions.create(
-                        model="gpt-3.5-turbo",
-                        messages=clean_context,
-                        max_tokens=500,
-                        temperature=0.7
-                    )
+                elif function_name == "get_user_email":
+                    # Wywołaj funkcję i dodaj wynik do kontekstu
+                    user_email = self.get_user_email(user_id)
+                    clean_context.append({
+                        "role": "function",
+                        "name": "get_user_email",
+                        "content": f"Aktualny email użytkownika: {user_email}"
+                    })
+                
+                # Wyślij ponownie do AI z wynikami funkcji
+                response = self.openai_client.chat.completions.create(
+                    model=self.config.get("openai_model", "gpt-3.5-turbo"),
+                    messages=clean_context
+                )
             
             ai_response = response.choices[0].message.content
             if ai_response:
