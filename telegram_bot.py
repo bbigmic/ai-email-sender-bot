@@ -674,7 +674,6 @@ Cześć! Jestem botem AI, który pomoże Ci zaplanować wysyłkę emaili.
 **Komendy:**
 /start - pokaż tę wiadomość
 /help - pomoc
-/status - status bota
 /set - ustaw swój email
 
 Zacznij od opisania emaila, który chcesz zaplanować! 📧"""
@@ -688,7 +687,6 @@ Zacznij od opisania emaila, który chcesz zaplanować! 📧"""
 **Funkcje:**
 ✅ Analiza wiadomości tekstowych i głosowych
 ✅ Automatyczne planowanie wysyłki emaili
-✅ Obsługa załączników
 ✅ Pamięć konwersacji
 ✅ Inteligentne pytania o brakujące dane
 
