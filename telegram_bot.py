@@ -177,7 +177,7 @@ class EmailPlanningBot:
     
     def get_actual_datetime(self) -> str:
         """Zwraca aktualną datę i godzinę w formacie czytelnym dla AI"""
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         return now.strftime("%d.%m.%Y %H:%M")
     
     def add_to_memory(self, user_id: int, role: str, content: str):
