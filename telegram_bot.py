@@ -58,6 +58,9 @@ class EmailPlanningBot:
         # Stan planowania emaila dla każdego użytkownika
         self.email_planning_state: Dict[int, Dict] = {}
         
+        # Email adresy użytkowników - każdy użytkownik ma swój domyślny email
+        self.user_emails: Dict[int, str] = {}
+        
         logger.info("Bot EmailPlanningBot zainicjalizowany")
     
     def load_config(self) -> Dict:
@@ -163,6 +166,20 @@ class EmailPlanningBot:
             }
         return self.conversation_memory[user_id]
     
+    def get_user_email(self, user_id: int) -> str:
+        """Pobiera email użytkownika lub zwraca domyślny"""
+        return self.user_emails.get(user_id, self.config.get("default_recipient", "borysm32@gmail.com"))
+    
+    def set_user_email(self, user_id: int, email: str):
+        """Ustawia email użytkownika"""
+        self.user_emails[user_id] = email
+        logger.info(f"✅ Użytkownik {user_id} ustawił email: {email}")
+    
+    def get_actual_datetime(self) -> str:
+        """Zwraca aktualną datę i godzinę w formacie czytelnym dla AI"""
+        now = datetime.now()
+        return now.strftime("%d.%m.%Y %H:%M")
+    
     def add_to_memory(self, user_id: int, role: str, content: str):
         """Dodaje wiadomość do pamięci użytkownika"""
         if not content or content is None:
@@ -180,6 +197,9 @@ class EmailPlanningBot:
         """Zwraca kontekst konwersacji dla OpenAI"""
         memory = self.get_user_memory(user_id)
         
+        # Pobierz email użytkownika
+        user_email = self.get_user_email(user_id)
+        
         # Podstawowe instrukcje
         context = [
             {
@@ -188,11 +208,12 @@ class EmailPlanningBot:
 
 INSTRUKCJE:
 1. Analizuj wiadomosci uzytkownikow i wyciagaj informacje o planowanym emailu
-2. Zawsze wysylaj emaile na adres: {self.config.get('default_recipient')}
+2. Zawsze wysylaj emaile na adres: {user_email}
 3. Sam decyduj jaki ma byc temat i tresc emaila na podstawie widoamosci od uzytkownika.
 4. Daty podawaj w formacie: DD.MM.RRRR HH:MM lub "za X minut/godzin/dni"
 5. Jesli uzytkownik wspomni o zalaczniku, popros o przeslanie pliku
-
+6. Przed ustaleniem daty wysylki emaila zawsze wywołaj funkcję get_actual_datetime() aby uzyskać aktualną datę i godzinę
+7. Pamiętaj, ze Twoim glownym zadaniem jest planowanie wysylki emaili.
 
 FORMAT ODPOWIEDZI:
 - Jesli masz wszystkie dane: "GOTOWE: temat|tresc|data_wysylki"
@@ -242,13 +263,49 @@ GOTOWE: Przypomnienie o spotkaniu|Spotkanie za 15 minut w sali konferencyjnej|za
             if not clean_context:
                 return "Nie moge przetworzyc tej wiadomosci. Sprobuj ponownie."
             
-            # Wyślij do OpenAI
+            # Definicja funkcji dostępnych dla AI
+            functions = [
+                {
+                    "name": "get_actual_datetime",
+                    "description": "Pobiera aktualną datę i godzinę",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                }
+            ]
+            
+            # Wyślij do OpenAI z funkcjami
             response = self.openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=clean_context,
+                functions=functions,
+                function_call="auto",
                 max_tokens=500,
                 temperature=0.7
             )
+            
+            # Sprawdź czy AI chce wywołać funkcję
+            message = response.choices[0].message
+            if message.function_call:
+                function_name = message.function_call.name
+                if function_name == "get_actual_datetime":
+                    # Wywołaj funkcję i dodaj wynik do kontekstu
+                    current_time = self.get_actual_datetime()
+                    clean_context.append({
+                        "role": "function",
+                        "name": "get_actual_datetime",
+                        "content": f"Aktualna data i godzina: {current_time}"
+                    })
+                    
+                    # Wyślij ponownie do AI z informacją o czasie
+                    response = self.openai_client.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=clean_context,
+                        max_tokens=500,
+                        temperature=0.7
+                    )
             
             ai_response = response.choices[0].message.content
             if ai_response:
@@ -364,10 +421,13 @@ GOTOWE: Przypomnienie o spotkaniu|Spotkanie za 15 minut w sali konferencyjnej|za
         try:
             send_datetime = self.parse_send_time(email_data["send_time"])
             
+            # Pobierz email użytkownika
+            user_email = self.get_user_email(user_id)
+            
             # Log szczegółów emaila przed planowaniem
             logger.info(f"📧 PLANOWANIE EMAILA:")
             logger.info(f"   👤 Użytkownik: {user_id}")
-            logger.info(f"   📧 Odbiorca: {self.config.get('default_recipient')}")
+            logger.info(f"   📧 Odbiorca: {user_email}")
             logger.info(f"   📝 Temat: {email_data['subject']}")
             logger.info(f"   📅 Data wysyłki: {send_datetime.strftime('%d.%m.%Y %H:%M')}")
             logger.info(f"   📄 Treść: {email_data['body'][:200]}{'...' if len(email_data['body']) > 200 else ''}")
@@ -376,7 +436,7 @@ GOTOWE: Przypomnienie o spotkaniu|Spotkanie za 15 minut w sali konferencyjnej|za
             
             # Zaplanuj email
             self.email_scheduler.schedule_email_datetime(
-                to_email=self.config.get("default_recipient"),
+                to_email=user_email,
                 subject=email_data["subject"],
                 body=email_data["body"],
                 send_datetime=send_datetime,
@@ -396,7 +456,7 @@ GOTOWE: Przypomnienie o spotkaniu|Spotkanie za 15 minut w sali konferencyjnej|za
             if user_id in self.email_planning_state:
                 del self.email_planning_state[user_id]
             
-            return f"✅ Email zaplanowany pomyślnie!\n\n📧 Temat: {email_data['subject']}\n📅 Data wysyłki: {send_datetime.strftime('%d.%m.%Y %H:%M')}\n📝 Treść: {email_data['body'][:100]}{'...' if len(email_data['body']) > 100 else ''}"
+            return f"✅ Email zaplanowany pomyślnie!\n\n📧 Temat: {email_data['subject']}\n📧 Odbiorca: {user_email}\n📅 Data wysyłki: {send_datetime.strftime('%d.%m.%Y %H:%M')}\n📝 Treść: {email_data['body'][:100]}{'...' if len(email_data['body']) > 100 else ''}"
             
         except Exception as e:
             logger.error(f"❌ BŁĄD PLANOWANIA EMAILA:")
@@ -597,6 +657,7 @@ Cześć! Jestem botem AI, który pomoże Ci zaplanować wysyłkę emaili.
 /start - pokaż tę wiadomość
 /help - pomoc
 /status - status bota
+/set - ustaw swój domyślny email
 
 Zacznij od opisania emaila, który chcesz zaplanować! 📧"""
         
@@ -625,6 +686,10 @@ Zacznij od opisania emaila, który chcesz zaplanować! 📧"""
 • "Zaplanuj email z raportem jutro o 8:00"
 • "Wyślij życzenia urodzinowe z załącznikiem 25.12.2024 10:00"
 
+**Komendy:**
+• `/set twoj@email.com` - ustaw swój domyślny email
+• `/set` - pokaż aktualny email
+
 **Wsparcie:**
 Jeśli masz problemy, napisz wiadomość opisującą co chcesz zrobić, a bot pomoże! 🤖"""
         
@@ -644,12 +709,49 @@ Sprawdź logi w pliku `telegram_bot.log`"""
         
         await update.message.reply_text(status_message, parse_mode='Markdown')
     
+    async def set_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Obsługuje komendę /set - ustawia email użytkownika"""
+        user_id = update.effective_user.id
+        
+        # Sprawdź czy podano email jako argument
+        if context.args and len(context.args) > 0:
+            email = context.args[0].strip()
+            
+            # Prosta walidacja emaila
+            if '@' in email and '.' in email.split('@')[1]:
+                self.set_user_email(user_id, email)
+                await update.message.reply_text(
+                    f"✅ **Email ustawiony!**\n\n"
+                    f"Twój domyślny adres email to: `{email}`\n\n"
+                    f"Teraz wszystkie zaplanowane emaile będą wysyłane na ten adres! 📧",
+                    parse_mode='Markdown'
+                )
+            else:
+                await update.message.reply_text(
+                    "❌ **Nieprawidłowy format emaila!**\n\n"
+                    "Użyj: `/set twoj@email.com`\n"
+                    "Przykład: `/set jan.kowalski@gmail.com`",
+                    parse_mode='Markdown'
+                )
+        else:
+            # Pokaż aktualny email użytkownika
+            current_email = self.get_user_email(user_id)
+            await update.message.reply_text(
+                f"📧 **Twój aktualny email:** `{current_email}`\n\n"
+                f"**Aby zmienić email, użyj:**\n"
+                f"`/set nowy@email.com`\n\n"
+                f"**Przykład:**\n"
+                f"`/set jan.kowalski@gmail.com`",
+                parse_mode='Markdown'
+            )
+    
     def setup_handlers(self, application: Application):
         """Konfiguruje handlery bota"""
         # Komendy
         application.add_handler(CommandHandler("start", self.start_command))
         application.add_handler(CommandHandler("help", self.help_command))
         application.add_handler(CommandHandler("status", self.status_command))
+        application.add_handler(CommandHandler("set", self.set_command))
         
         # Wiadomości
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_text_message))
