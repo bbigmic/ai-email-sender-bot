@@ -58,7 +58,7 @@ class EmailPlanningBot:
         # Stan planowania emaila dla każdego użytkownika
         self.email_planning_state: Dict[int, Dict] = {}
         
-        # Email adresy użytkowników - każdy użytkownik ma swój domyślny email
+        # Email adresy użytkowników - każdy użytkownik ma swój  email
         self.user_emails: Dict[int, str] = {}
         
         logger.info("Bot EmailPlanningBot zainicjalizowany")
@@ -661,9 +661,9 @@ GOTOWE: Przypomnienie o spotkaniu|Spotkanie za 15 minut w sali konferencyjnej|za
 Cześć! Jestem botem AI, który pomoże Ci zaplanować wysyłkę emaili.
 
 **Jak używać:**
+• Ustaw swój email za pomocą komendy /set (wystarszy jednorazowo)
 • Napisz lub nagraj wiadomość opisującą email, który chcesz zaplanować
 • Bot przeanalizuje wiadomość i zapyta o brakujące szczegóły
-• Jeśli wspomnisz o załączniku, bot poprosi o przesłanie pliku
 • Bot automatycznie zaplanuje wysyłkę na określony czas
 
 **Przykłady:**
@@ -675,7 +675,7 @@ Cześć! Jestem botem AI, który pomoże Ci zaplanować wysyłkę emaili.
 /start - pokaż tę wiadomość
 /help - pomoc
 /status - status bota
-/set - ustaw swój domyślny email
+/set - ustaw swój email
 
 Zacznij od opisania emaila, który chcesz zaplanować! 📧"""
         
@@ -705,7 +705,7 @@ Zacznij od opisania emaila, który chcesz zaplanować! 📧"""
 • "Wyślij życzenia urodzinowe z załącznikiem 25.12.2024 10:00"
 
 **Komendy:**
-• `/set twoj@email.com` - ustaw swój domyślny email
+• `/set twoj@email.com` - ustaw swój email
 • `/set` - pokaż aktualny email
 
 **Wsparcie:**
@@ -740,7 +740,7 @@ Sprawdź logi w pliku `telegram_bot.log`"""
                 self.set_user_email(user_id, email)
                 await update.message.reply_text(
                     f"✅ **Email ustawiony!**\n\n"
-                    f"Twój domyślny adres email to: `{email}`\n\n"
+                    f"Twój adres email to: `{email}`\n\n"
                     f"Teraz wszystkie zaplanowane emaile będą wysyłane na ten adres! 📧",
                     parse_mode='Markdown'
                 )
