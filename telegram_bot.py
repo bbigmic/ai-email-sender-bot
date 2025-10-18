@@ -10,8 +10,10 @@ import json
 import logging
 import asyncio
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional, Tuple
 import tempfile
+
 
 # Telegram Bot API
 from telegram import Update, Bot
@@ -177,7 +179,7 @@ class EmailPlanningBot:
     
     def get_actual_datetime(self) -> str:
         """Zwraca aktualną datę i godzinę w formacie czytelnym dla AI"""
-        now = datetime.now(timezone.cet)
+        now = datetime.now(ZoneInfo("Europe/Warsaw"))
         return now.strftime("%d.%m.%Y %H:%M")
     
     def add_to_memory(self, user_id: int, role: str, content: str):
